@@ -652,36 +652,18 @@
                 
                 // render the layer, its really important we lock
                 // the transaction when drawing
-                IJSVGBeginTransactionLock();
-                // do we need to update the backing scales on the
-                // layers?
+                BOOL requiresTransactionLock = [self requiresTransactionLock];
+                if(requiresTransactionLock == YES) {
+                    IJSVGBeginTransactionLock();
+                }
+                // do we need to update the backing scales on the layers?
                 if(self.renderingBackingScaleHelper != nil) {
                     [self _askHelperForBackingScale];
                 }
-                
-                // render the layers
-                switch(self.renderingEngine) {
-                    // CoreGraphics / Quartz
-                    case IJSVGRenderingEngineCoreGraphics: {
-                        if(_quartzRenderer == nil) {
-                            // init the renderer if its not already defined
-                            _quartzRenderer = [[IJSVGQuartzRenderer alloc] init];
-                        }
-                        _quartzRenderer.scale = _scale;
-                        _quartzRenderer.backingScale = _backingScale;
-                        _quartzRenderer.viewPort = viewPort;
-                        
-                        // render it
-                        [_quartzRenderer renderLayer:self.layer
-                                           inContext:ref];
-                        break;
-                    }
-                    // CALayer tree
-                    case IJSVGRenderingEngineCoreAnimation: {
-                        [self.layer renderInContext:ref];
-                    }
+                [self.layer renderInContext:ref];
+                if(requiresTransactionLock == YES) {
+                    IJSVGEndTransactionLock();
                 }
-                IJSVGEndTransactionLock();
             }
         }
         @catch (NSException *exception) {
@@ -761,6 +743,11 @@
     [_layerTree release], _layerTree = nil;
 }
 
+- (BOOL)requiresTransactionLock
+{
+    return NSThread.currentThread.isMainThread == NO;
+}
+
 - (IJSVGLayer *)layerWithTree:(IJSVGLayerTree *)tree
 {
     // clear memory
@@ -769,10 +756,14 @@
     }
     
     // force rebuild of the tree
-    IJSVGBeginTransactionLock();
+    BOOL requiresTransactionLock = [self requiresTransactionLock];
+    if(requiresTransactionLock == YES) {
+        IJSVGBeginTransactionLock();
+    }
     _layerTree = [[tree layerForNode:_group] retain];
-    
-    IJSVGEndTransactionLock();
+    if(requiresTransactionLock == YES) {
+        IJSVGEndTransactionLock();
+    }
     return _layerTree;
 }
 
